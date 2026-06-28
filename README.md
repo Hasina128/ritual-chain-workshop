@@ -109,17 +109,15 @@ pnpm dev
 - `ARCHITECTURE.md` — commit-reveal vs Ritual-native encrypted design
 - `REFLECTION.md` — reflection question answer
 
-## Wallet setup (3 fresh keys)
+## Wallet setup
 
-This submission uses three separate Ritual testnet wallets:
-
-| Role | Env var | Address (this run) |
-|------|---------|-------------------|
-| Bounty owner | `CREATOR_PRIVATE_KEY` / `DEPLOYER_PRIVATE_KEY` | `0xD7580e8A956c5C4047a942e9eC527D58C87C13fA` |
+| Role | Env var | Address |
+|------|---------|---------|
+| Bounty owner | `CREATOR_PRIVATE_KEY` / `DEPLOYER_PRIVATE_KEY` | *you provide in `hardhat/.env`* |
 | Participant A | `USER1_PRIVATE_KEY` | `0xDa4403d9F702e5Ce7520bCbDF054A8f9EF4A5905` |
 | Participant B | `USER2_PRIVATE_KEY` | `0xD9d58227BB51a41107BB2B5295D2123167ab112a` |
 
-Copy `hardhat/.env.example` → `hardhat/.env` and fund all three via the [Ritual faucet](https://faucet.ritualfoundation.org).
+Add your creator key to `hardhat/.env`, then fund all three wallets via the [Ritual faucet](https://faucet.ritualfoundation.org).
 
 ## Deploy & configure
 
@@ -127,6 +125,22 @@ Copy `hardhat/.env.example` → `hardhat/.env` and fund all three via the [Ritua
 cd hardhat
 pnpm exec hardhat ignition deploy ignition/modules/AIJudge.ts --network ritual --deployment-id aijudge-hasina
 # Copy deployed address into hardhat/.env CONTRACT_ADDRESS and web/.env.local NEXT_PUBLIC_CONTRACT_ADDRESS
+```
+
+### Hasina128 testnet deployment
+
+| Item | Value |
+|------|-------|
+| Contract | `0xD2EaA4125C3Eb2dEBA2aB63A98e9C55Cd925a919` |
+| Chain | Ritual testnet (`1979`) |
+| Explorer | [AIJudge contract](https://explorer.ritualfoundation.org/address/0xD2EaA4125C3Eb2dEBA2aB63A98e9C55Cd925a919) |
+
+End-to-end demo scripts:
+
+```bash
+cd hardhat
+pnpm bounty:auto -- --bounty-id 1          # commit → reveal → judge → finalize
+node --experimental-strip-types scripts/quick-judge.ts 1   # judge + finalize (if async LLM pending)
 ```
 
 ## Submission checklist
