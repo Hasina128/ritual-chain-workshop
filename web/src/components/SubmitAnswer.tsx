@@ -1,12 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import { useAccount } from "wagmi";
+import { useEffect, useState } from "react";
+import { useAccount, useReadContract } from "wagmi";
 import { useNow } from "@/hooks/useNow";
 import aiJudgeAbi from "@/abi/AIJudge";
 import { contractAddress } from "@/config/contract";
 import { ritualChain } from "@/config/wagmi";
-import { canSubmit, type Bounty } from "@/lib/bounty";
+import { canCommit, canReveal, type Bounty } from "@/lib/bounty";
+import {
+  computeCommitment,
+  generateSalt,
+  loadRevealSalt,
+  storeRevealSalt,
+} from "@/lib/commitment";
 import { useWriteTx } from "@/hooks/useWriteTx";
 import {
   Card,
@@ -16,6 +22,7 @@ import {
   Textarea,
   Button,
   TxStatus,
+  Notice,
 } from "@/components/ui";
 
 const explorerBase = ritualChain.blockExplorers?.default.url;
@@ -29,26 +36,66 @@ export function SubmitAnswer({
   bounty: Bounty;
   onSubmitted: () => void;
 }) {
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
   const [answer, setAnswer] = useState("");
+  const [savedSalt, setSavedSalt] = useState<`0x${string}` | null>(null);
   const now = useNow();
-  const tx = useWriteTx(() => {
+
+
+  const commitTx = useWriteTx(() => {
     setAnswer("");
     onSubmitted();
   });
+  const revealTx = useWriteTx(() => onSubmitted());
 
-  // Submission window closed — nothing to show.
-  if (!canSubmit(bounty, now / 1000)) return null;
+  const { data: hasCommitted } = useReadContract({
+    address: contractAddress,
+    abi: aiJudgeAbi,
+    functionName: "hasCommitted",
+    args:
+      address && bountyId !== undefined
+        ? [bountyId, address]
+        : undefined,
+    chainId: ritualChain.id,
+    query: { enabled: !!contractAddress && !!address },
+  });
 
-  async function handleSubmit(e: React.FormEvent) {
+  useEffect(() => {
+    if (!address) return;
+    const saved = loadRevealSalt({ bountyId, submitter: address });
+    if (saved) {
+      setSavedSalt(saved.salt);
+      if (!answer) setAnswer(saved.answer);
+    }
+  }, [address, bountyId, answer]);
+
+  const showCommit = canCommit(bounty, now) && !hasCommitted;
+  const showReveal = canReveal(bounty, now) && hasCommitted === true;
+
+  if (!showCommit && !showReveal) return null;
+
+  async function handleCommit(e: React.FormEvent) {
     e.preventDefault();
-    if (!answer.trim() || !contractAddress) return;
+    if (!answer.trim() || !contractAddress || !address) return;
+
+    const trimmed = answer.trim();
+    const salt = generateSalt();
+    const commitment = computeCommitment({
+      bountyId,
+      answer: trimmed,
+      salt,
+      submitter: address,
+    });
+
+    storeRevealSalt({ bountyId, submitter: address, salt, answer: trimmed });
+    setSavedSalt(salt);
+
     try {
-      await tx.run({
+      await commitTx.run({
         address: contractAddress,
         abi: aiJudgeAbi,
-        functionName: "submitAnswer",
-        args: [bountyId, answer.trim()],
+        functionName: "submitCommitment",
+        args: [bountyId, commitment],
         chainId: ritualChain.id,
       });
     } catch {
@@ -56,14 +103,83 @@ export function SubmitAnswer({
     }
   }
 
+  async function handleReveal(e: React.FormEvent) {
+    e.preventDefault();
+    if (!contractAddress || !address) return;
+
+    const saved = loadRevealSalt({ bountyId, submitter: address });
+    if (!saved) {
+      window.alert(
+        "Reveal salt not found in this browser. Re-enter your exact answer and salt if you saved them elsewhere.",
+      );
+      return;
+    }
+
+    try {
+      await revealTx.run({
+        address: contractAddress,
+        abi: aiJudgeAbi,
+        functionName: "revealAnswer",
+        args: [bountyId, saved.answer, saved.salt],
+        chainId: ritualChain.id,
+      });
+    } catch {
+      /* surfaced via tx.state */
+    }
+  }
+
+  if (showReveal) {
+    return (
+      <Card>
+        <CardHeader
+          title="Reveal your answer"
+          subtitle="Reveal phase is open. Your commitment was stored — reveal to become eligible for judging."
+        />
+        <CardBody>
+          <form onSubmit={handleReveal} className="space-y-3">
+            {savedSalt ? (
+              <Notice tone="indigo">
+                Salt found locally for this bounty. Click reveal to publish your
+                answer on-chain.
+              </Notice>
+            ) : (
+              <Notice tone="amber">
+                No local salt found. If you committed from another browser, you
+                must reveal manually with your saved answer and salt.
+              </Notice>
+            )}
+            <Button
+              type="submit"
+              disabled={!isConnected || !savedSalt || revealTx.isBusy}
+              className="w-full"
+            >
+              {revealTx.isBusy ? "Revealing…" : "Reveal answer"}
+            </Button>
+            {!isConnected && (
+              <p className="text-xs text-zinc-500">
+                Connect your wallet to reveal.
+              </p>
+            )}
+            <TxStatus
+              state={revealTx.state}
+              error={revealTx.error}
+              hash={revealTx.hash}
+              explorerBase={explorerBase}
+            />
+          </form>
+        </CardBody>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader
-        title="Submit an answer"
-        subtitle="Open until the deadline. One entry, judged against the rubric."
+        title="Submit a commitment"
+        subtitle="Only a hash is stored on-chain until the reveal phase. Save your answer locally — you will need it to reveal."
       />
       <CardBody>
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleCommit} className="space-y-3">
           <Field label="Your answer">
             <Textarea
               value={answer}
@@ -74,10 +190,10 @@ export function SubmitAnswer({
           </Field>
           <Button
             type="submit"
-            disabled={!isConnected || !answer.trim() || tx.isBusy}
+            disabled={!isConnected || !answer.trim() || commitTx.isBusy}
             className="w-full"
           >
-            {tx.isBusy ? "Submitting…" : "Submit answer"}
+            {commitTx.isBusy ? "Submitting commitment…" : "Submit commitment"}
           </Button>
           {!isConnected && (
             <p className="text-xs text-zinc-500">
@@ -85,9 +201,9 @@ export function SubmitAnswer({
             </p>
           )}
           <TxStatus
-            state={tx.state}
-            error={tx.error}
-            hash={tx.hash}
+            state={commitTx.state}
+            error={commitTx.error}
+            hash={commitTx.hash}
             explorerBase={explorerBase}
           />
         </form>

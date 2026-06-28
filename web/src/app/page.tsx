@@ -13,6 +13,7 @@ import { Notice } from "@/components/ui";
 
 export default function Home() {
   const [selectedId, setSelectedId] = useState<bigint | null>(null);
+  const [automateId, setAutomateId] = useState<bigint | null>(null);
   const { ids, add } = useRecentBounties();
 
   // Track any opened bounty in the recent list too. `add` is a no-op when the
@@ -22,9 +23,10 @@ export default function Home() {
   }, [selectedId, add]);
 
   const handleCreated = useCallback(
-    (id: bigint) => {
+    (id: bigint, autoRun?: boolean) => {
       add(id);
       setSelectedId(id);
+      if (autoRun) setAutomateId(id);
     },
     [add],
   );
@@ -90,7 +92,7 @@ export default function Home() {
         {/* Selected bounty */}
         {selectedId !== null && (
           <section className="mt-6">
-            <BountyView bountyId={selectedId} />
+            <BountyView bountyId={selectedId} automate={automateId === selectedId} />
           </section>
         )}
 

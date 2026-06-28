@@ -1,0 +1,7 @@
+# Reflection Question
+
+> What should be public, what should stay hidden, and what should be decided by AI versus by a human in a bounty system?
+
+Bounty metadata — the title, rubric, deadlines, reward amount, and owner address — should be public so participants know the rules and can trust the escrow. During the submission phase, plaintext answers must stay hidden; only commitments should appear on-chain so late entrants cannot copy earlier ideas. The random salt and unrevealed answer should remain off-chain until the participant chooses to reveal. After the reveal deadline, revealed answers necessarily become public on a commit-reveal chain, though an advanced Ritual-native design could keep them encrypted until judging completes inside a TEE.
+
+AI is well suited to batch-evaluating all revealed submissions against a fixed rubric in a single Ritual LLM call, producing a ranking and recommended winner. Humans should retain final authority: the owner calls `finalizeWinner` to mitigate model hallucinations, rubric misinterpretation, and prompt-injection attempts hidden inside submissions. Payout is a high-stakes, irreversible action and should never be fully automated from raw model output without an explicit human confirmation step. The AI review itself can be public after judging so participants understand the decision rationale. In short: rules and outcomes public, answers hidden until reveal (or TEE judging in advanced designs), AI advises, humans decide.

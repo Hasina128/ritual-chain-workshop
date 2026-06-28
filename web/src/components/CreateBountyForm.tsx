@@ -1,12 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useAccount } from "wagmi";
-import { parseEther, parseEventLogs } from "viem";
-import { contractAddress, isContractConfigured } from "@/config/contract";
-import { ritualChain } from "@/config/wagmi";
-import aiJudgeAbi from "@/abi/AIJudge";
-import { useWriteTx } from "@/hooks/useWriteTx";
+import { parseEther } from "viem";
+import { isContractConfigured } from "@/config/contract";
 import {
   Card,
   CardHeader,
@@ -15,55 +11,40 @@ import {
   Input,
   Textarea,
   Button,
-  TxStatus,
   Notice,
 } from "@/components/ui";
 
-const explorerBase = ritualChain.blockExplorers?.default.url;
-
-/** Default datetime-local value = now + 1 hour, in the input's expected format. */
-function defaultDeadline(): string {
-  const d = new Date(Date.now() + 60 * 60 * 1000);
-  // Strip seconds/tz to YYYY-MM-DDTHH:mm in local time.
+function defaultDeadline(offsetMinutes: number): string {
+  const d = new Date(Date.now() + offsetMinutes * 60 * 1000);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
     d.getHours(),
   )}:${pad(d.getMinutes())}`;
 }
 
-export function CreateBountyForm({ onCreated }: { onCreated?: (bountyId: bigint) => void }) {
-  const { isConnected } = useAccount();
+export function CreateBountyForm({
+  onCreated,
+}: {
+  onCreated?: (bountyId: bigint, autoRun: boolean) => void;
+}) {
   const [title, setTitle] = useState("");
   const [rubric, setRubric] = useState("");
-  const [deadline, setDeadline] = useState(defaultDeadline());
-  const [reward, setReward] = useState("");
+  const [submissionDeadline, setSubmissionDeadline] = useState(defaultDeadline(3));
+  const [revealDeadline, setRevealDeadline] = useState(defaultDeadline(8));
+  const [reward, setReward] = useState("0.05");
   const [createdId, setCreatedId] = useState<bigint | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
 
-  // Once confirmed, pull the new bountyId out of the BountyCreated event log.
-  const tx = useWriteTx((receipt) => {
-    try {
-      const logs = parseEventLogs({
-        abi: aiJudgeAbi,
-        eventName: "BountyCreated",
-        logs: receipt.logs,
-      });
-      const id = logs[0]?.args?.bountyId;
-      if (id !== undefined) {
-        setCreatedId(id);
-        onCreated?.(id);
-      }
-    } catch {
-      /* couldn't decode — not fatal */
-    }
-  });
-
-  // Pure, render-safe validation (no clock reads here — see handleSubmit).
   const validation = useMemo(() => {
     if (!title.trim()) return "Title is required.";
     if (!rubric.trim()) return "Rubric is required.";
-    if (!deadline) return "Pick a deadline.";
-    const ts = new Date(deadline).getTime();
-    if (!Number.isFinite(ts)) return "Invalid deadline.";
+    if (!submissionDeadline || !revealDeadline) return "Pick both deadlines.";
+    const subTs = new Date(submissionDeadline).getTime();
+    const revTs = new Date(revealDeadline).getTime();
+    if (!Number.isFinite(subTs) || !Number.isFinite(revTs)) return "Invalid deadline.";
+    if (revTs <= subTs) return "Reveal deadline must be after submission deadline.";
     if (reward !== "") {
       try {
         parseEther(reward);
@@ -72,35 +53,51 @@ export function CreateBountyForm({ onCreated }: { onCreated?: (bountyId: bigint)
       }
     }
     return null;
-  }, [title, rubric, deadline, reward]);
+  }, [title, rubric, submissionDeadline, revealDeadline, reward]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (validation || !contractAddress) return;
+    if (validation || !isContractConfigured) return;
 
-    const deadlineMs = new Date(deadline).getTime();
-    if (deadlineMs <= Date.now()) {
-      // Clock read belongs in the event handler, not render.
-      window.alert("Deadline must be in the future.");
+    const submissionMs = new Date(submissionDeadline).getTime();
+    const revealMs = new Date(revealDeadline).getTime();
+    if (submissionMs <= Date.now()) {
+      window.alert("Submission deadline must be in the future.");
       return;
     }
 
-    const deadlineTs = BigInt(Math.floor(deadlineMs / 1000));
-    console.log("Creating bounty with", { title, rubric, deadlineTs, reward });
-    const value = reward.trim() === "" ? 0n : parseEther(reward.trim());
+    setBusy(true);
+    setError(null);
+    setStatus("Creating bounty + committing user1 & user2 on-chain (no MetaMask)…");
     setCreatedId(null);
 
     try {
-      await tx.run({
-        address: contractAddress,
-        abi: aiJudgeAbi,
-        functionName: "createBounty",
-        args: [title.trim(), rubric.trim(), deadlineTs],
-        value,
-        chainId: ritualChain.id,
+      const res = await fetch("/api/bounty/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          rubric: rubric.trim(),
+          reward: reward.trim() || "0.05",
+          submissionDeadline: submissionMs,
+          revealDeadline: revealMs,
+        }),
       });
-    } catch {
-      /* surfaced via tx.state */
+      const data = (await res.json()) as {
+        bountyId?: string;
+        message?: string;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error ?? "Create failed");
+
+      const id = BigInt(data.bountyId!);
+      setCreatedId(id);
+      setStatus(data.message ?? "Created.");
+      onCreated?.(id, true);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -108,15 +105,20 @@ export function CreateBountyForm({ onCreated }: { onCreated?: (bountyId: bigint)
     <Card>
       <CardHeader
         title="Create a bounty"
-        subtitle="Fund a reward and define how submissions will be judged."
+        subtitle="Fill the form — server signs all txs using keys from hardhat/.env. No MetaMask."
       />
       <CardBody>
         {!isContractConfigured && (
           <Notice tone="amber">
-            Set <code className="font-mono">NEXT_PUBLIC_CONTRACT_ADDRESS</code> in your{" "}
-            <code className="font-mono">.env.local</code> to enable transactions.
+            Set <code className="font-mono">NEXT_PUBLIC_CONTRACT_ADDRESS</code> in{" "}
+            <code className="font-mono">web/.env.local</code>.
           </Notice>
         )}
+
+        <Notice tone="indigo" >
+          Keys live in <code className="font-mono">hardhat/.env</code> (CREATOR, USER1, USER2).
+          Reward <strong>0.05</strong> RITUAL recommended. Use short deadlines (3 min / 8 min defaults).
+        </Notice>
 
         <form onSubmit={handleSubmit} className="mt-3 space-y-3">
           <Field label="Title">
@@ -128,7 +130,7 @@ export function CreateBountyForm({ onCreated }: { onCreated?: (bountyId: bigint)
             />
           </Field>
 
-          <Field label="Rubric" hint="How submissions are scored. The AI judges only against this.">
+          <Field label="Rubric">
             <Textarea
               value={rubric}
               onChange={(e) => setRubric(e.target.value)}
@@ -138,24 +140,32 @@ export function CreateBountyForm({ onCreated }: { onCreated?: (bountyId: bigint)
           </Field>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Deadline">
+            <Field label="Submission deadline">
               <Input
                 type="datetime-local"
-                value={deadline}
-                onChange={(e) => setDeadline(e.target.value)}
+                value={submissionDeadline}
+                onChange={(e) => setSubmissionDeadline(e.target.value)}
               />
             </Field>
-            <Field label="Reward (RITUAL)" hint="Locked in the contract on create.">
+            <Field label="Reveal deadline">
               <Input
-                type="number"
-                min="0"
-                step="any"
-                value={reward}
-                onChange={(e) => setReward(e.target.value)}
-                placeholder="1.0"
+                type="datetime-local"
+                value={revealDeadline}
+                onChange={(e) => setRevealDeadline(e.target.value)}
               />
             </Field>
           </div>
+
+          <Field label="Reward (RITUAL)">
+            <Input
+              type="number"
+              min="0"
+              step="any"
+              value={reward}
+              onChange={(e) => setReward(e.target.value)}
+              placeholder="0.05"
+            />
+          </Field>
 
           {validation && (title || rubric || reward) ? (
             <p className="text-xs text-amber-300">{validation}</p>
@@ -163,23 +173,19 @@ export function CreateBountyForm({ onCreated }: { onCreated?: (bountyId: bigint)
 
           <Button
             type="submit"
-            disabled={!isConnected || !isContractConfigured || !!validation || tx.isBusy}
+            disabled={!isContractConfigured || !!validation || busy}
             className="w-full"
           >
-            {tx.isBusy ? "Creating…" : "Create bounty"}
+            {busy ? "Running on-chain…" : "Create bounty + start automation"}
           </Button>
 
-          {!isConnected && (
-            <p className="text-xs text-zinc-500">Connect your wallet to create a bounty.</p>
-          )}
-
-          <TxStatus state={tx.state} error={tx.error} hash={tx.hash} explorerBase={explorerBase} />
+          {error && <Notice tone="red">{error}</Notice>}
+          {status && !error && <Notice tone="green">{status}</Notice>}
 
           {createdId !== null && (
             <Notice tone="green">
-              Bounty created with id{" "}
-              <span className="font-mono font-semibold">#{createdId.toString()}</span>. Loaded
-              below.
+              Bounty <span className="font-mono font-semibold">#{createdId.toString()}</span> — automation
+              will reveal, judge, and finalize automatically.
             </Notice>
           )}
         </form>

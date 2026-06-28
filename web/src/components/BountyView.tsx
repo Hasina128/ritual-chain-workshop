@@ -11,9 +11,16 @@ import { JudgeAll } from "@/components/JudgeAll";
 import { FinalizeWinner } from "@/components/FinalizeWinner";
 import { AIReviewDisplay } from "@/components/AIReviewDisplay";
 import { SubmissionsList } from "@/components/SubmissionsList";
+import { AutomationPoller } from "@/components/AutomationPoller";
 import { Card, CardBody, Notice, Spinner } from "@/components/ui";
 
-export function BountyView({ bountyId }: { bountyId: bigint }) {
+export function BountyView({
+  bountyId,
+  automate = false,
+}: {
+  bountyId: bigint;
+  automate?: boolean;
+}) {
   const { address } = useAccount();
   const { bounty, isLoading, isError, refetch } = useBounty(bountyId);
 
@@ -59,23 +66,21 @@ export function BountyView({ bountyId }: { bountyId: bigint }) {
       {/* Left column: details + owner/participant actions */}
       <div className="space-y-4">
         <BountyDetail bountyId={bountyId} bounty={bounty} isOwner={isOwner} />
-        <SubmitAnswer
-          bountyId={bountyId}
-          bounty={bounty}
-          onSubmitted={reload}
-        />
-        <JudgeAll
-          bountyId={bountyId}
-          bounty={bounty}
-          isOwner={isOwner}
-          onJudged={reload}
-        />
-        <FinalizeWinner
-          bountyId={bountyId}
-          bounty={bounty}
-          isOwner={isOwner}
-          onFinalized={reload}
-        />
+        {automate && !bounty.finalized && (
+          <AutomationPoller bountyId={bountyId} onUpdate={reload} />
+        )}
+        {!automate && (
+          <>
+            <SubmitAnswer bountyId={bountyId} bounty={bounty} onSubmitted={reload} />
+            <JudgeAll bountyId={bountyId} bounty={bounty} isOwner={isOwner} onJudged={reload} />
+            <FinalizeWinner
+              bountyId={bountyId}
+              bounty={bounty}
+              isOwner={isOwner}
+              onFinalized={reload}
+            />
+          </>
+        )}
       </div>
 
       {/* Right column: AI review + submissions */}
@@ -83,7 +88,7 @@ export function BountyView({ bountyId }: { bountyId: bigint }) {
         {bounty.judged && <AIReviewDisplay aiReview={bounty.aiReview} />}
         <SubmissionsList
           bountyId={bountyId}
-          count={Number(bounty.submissionCount)}
+          bounty={bounty}
           judge={judge}
           finalWinner={
             bounty.finalized ? Number(bounty.winnerIndex) : undefined

@@ -2,6 +2,12 @@
   "name": "hardhat",
   "version": "1.0.0",
   "type": "module",
+  "scripts": {
+    "bounty:commit": "node --experimental-strip-types scripts/bounty-flow.ts commit",
+    "bounty:reveal": "node --experimental-strip-types scripts/bounty-flow.ts reveal",
+    "bounty:judge": "node --experimental-strip-types scripts/bounty-flow.ts judge",
+    "bounty:auto": "node --experimental-strip-types scripts/bounty-flow.ts auto"
+  },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^3.1.7",
     "@nomicfoundation/hardhat-toolbox-viem": "^5.0.7",

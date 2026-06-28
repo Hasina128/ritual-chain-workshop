@@ -1,7 +1,7 @@
 "use client";
 
 import type { Bounty } from "@/lib/bounty";
-import { getBountyStatus, STATUS_META } from "@/lib/bounty";
+import { getBountyPhase, PHASE_META } from "@/lib/bounty";
 import { useNow } from "@/hooks/useNow";
 import { shortenAddress, formatReward, formatTimestamp, formatRelative } from "@/lib/format";
 import { Card, CardHeader, CardBody, Badge, Stat } from "@/components/ui";
@@ -16,8 +16,8 @@ export function BountyDetail({
   isOwner: boolean;
 }) {
   const now = useNow();
-  const status = getBountyStatus(bounty, now / 1000);
-  const meta = STATUS_META[status];
+  const phase = getBountyPhase(bounty, now);
+  const meta = PHASE_META[phase];
 
   return (
     <Card>
@@ -47,14 +47,28 @@ export function BountyDetail({
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-2">
           <Stat label="Reward" value={formatReward(bounty.reward)} />
-          <Stat label="Submissions" value={bounty.submissionCount.toString()} />
           <Stat
-            label="Deadline"
+            label="Submissions"
+            value={`${bounty.submissionCount.toString()} (${bounty.revealedCount.toString()} revealed)`}
+          />
+          <Stat
+            label="Submission deadline"
             value={
               <span>
-                {formatTimestamp(bounty.deadline)}
+                {formatTimestamp(bounty.submissionDeadline)}
                 <span className="ml-1 text-xs text-zinc-500">
-                  ({formatRelative(bounty.deadline)})
+                  ({formatRelative(bounty.submissionDeadline)})
+                </span>
+              </span>
+            }
+          />
+          <Stat
+            label="Reveal deadline"
+            value={
+              <span>
+                {formatTimestamp(bounty.revealDeadline)}
+                <span className="ml-1 text-xs text-zinc-500">
+                  ({formatRelative(bounty.revealDeadline)})
                 </span>
               </span>
             }

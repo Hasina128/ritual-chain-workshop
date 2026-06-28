@@ -6,12 +6,13 @@ import { RITUAL_WALLET, ritualWalletAbi } from "@/abi/RitualWallet";
  * These mirror what the LLM precompile expects: enough RITUAL deposited, and
  * a lock that outlives the async callback by a comfortable buffer.
  */
+/** Minimum RitualWallet balance to run judgeAll (LLM precompile fees). */
 export const MIN_LLM_BALANCE = parseEther("0.05");
 /** How long (in blocks) the "Deposit LLM Fees" action locks funds for. */
 export const LOCK_DURATION = 100_000n;
 /** Lock must extend at least this many blocks past the current block. */
 export const REQUIRED_TTL_BUFFER = 300n;
-/** Amount sent with a single deposit. */
+/** Amount sent with a single deposit (per Ritual docs; not gas). */
 export const DEPOSIT_AMOUNT = parseEther("0.05");
 
 export type RitualWalletStatus = {

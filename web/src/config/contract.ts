@@ -23,7 +23,7 @@ export const isContractConfigured = Boolean(contractAddress);
 /** Ritual LLM executor / callback address used when encoding `judgeAll` input. */
 export const executorAddress: Address =
   (process.env.NEXT_PUBLIC_RITUAL_EXECUTOR_ADDRESS?.trim() as Address | undefined) ??
-  "0x0000000000000000000000000000000000000802";
+  "0xB42e435c4252A5a2E7440e37B609F00c61a0c91B";
 
 export const ritualChainId = Number(
   process.env.NEXT_PUBLIC_RITUAL_CHAIN_ID ?? "1979",

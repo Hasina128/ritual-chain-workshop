@@ -20,6 +20,7 @@
 .env
 .env.*
 !.env.example
+.bounty-salts-*.json
 
 # Hardhat coverage reports
 /coverage

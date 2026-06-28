@@ -28,12 +28,14 @@ export const RITUAL_LLM_PRECOMPILE: Address = "0x0000000000000000000000000000000
 /** Switch between the best-effort ABI layout and a mocked JSON payload. */
 const ENCODING: "abi" | "json" = "abi";
 
-/** Model + sampling config. Low temperature keeps judging stable. */
-export const JUDGE_MODEL = "gpt-4o-mini";
-export const JUDGE_TEMPERATURE = 0.1;
-export const JUDGE_MAX_TOKENS = 1024;
-/** Temperature is sent as fixed-point (x1e6) because Solidity has no floats. */
-const TEMPERATURE_SCALE = 1_000_000n;
+/** Ritual production model (reasoning model — needs >=4096 maxCompletionTokens). */
+export const JUDGE_MODEL = "zai-org/GLM-4.7-FP8";
+/** Temperature on Ritual LLM ABI is scaled ×1000 (700 = 0.7). */
+export const JUDGE_TEMPERATURE_SCALED = 700n;
+export const JUDGE_MAX_COMPLETION_TOKENS = 4096n;
+export const JUDGE_TTL_BLOCKS = 300n;
+/** Async LLM txs cannot be gas-estimated (simulation returns empty precompile output). */
+export const JUDGE_ALL_GAS = 3_000_000n;
 
 export type JudgeSubmission = {
   index: number;
@@ -137,8 +139,8 @@ export function buildJudgeAllLlmInput({
       JSON.stringify({
         executor: executorAddress,
         model: JUDGE_MODEL,
-        temperature: JUDGE_TEMPERATURE,
-        maxTokens: JUDGE_MAX_TOKENS,
+        temperature: Number(JUDGE_TEMPERATURE_SCALED) / 1000,
+        maxTokens: Number(JUDGE_MAX_COMPLETION_TOKENS),
         prompt,
       }),
     );
@@ -147,33 +149,33 @@ export function buildJudgeAllLlmInput({
   return encodeAbiParameters(llmParams, [
     executorAddress,
     [], // encryptedSecrets
-    300n, // ttl in blocks
+    JUDGE_TTL_BLOCKS,
     [], // secretSignatures
     "0x", // userPublicKey
     messages,
-    "zai-org/GLM-4.7-FP8",
+    JUDGE_MODEL,
     0n, // frequencyPenalty
     "", // logitBiasJson
     false, // logprobs
-    8192n, // maxCompletionTokens
+    JUDGE_MAX_COMPLETION_TOKENS,
     "", // metadataJson
     "", // modalitiesJson
     1n, // n
-    false, // parallelToolCalls
+    true, // parallelToolCalls
     0n, // presencePenalty
-    "low", // reasoningEffort
+    "medium", // reasoningEffort
     "0x", // responseFormatData
     -1n, // seed
-    "", // serviceTier
+    "auto", // serviceTier
     "", // stopJson
     false, // stream
-    100n, // temperature: 0.2 × 1000, lower = more stable judging
+    JUDGE_TEMPERATURE_SCALED,
     "0x", // toolChoiceData
     "0x", // toolsData
     -1n, // topLogprobs
     1000n, // topP
     "", // user
     false, // piiEnabled
-    ["", ``, ""], // convoHistory
+    ["", "", ""], // convoHistory (empty = no history)
   ]);
 }
