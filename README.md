@@ -1,6 +1,6 @@
 # Privacy-Preserving AI Bounty Judge
 
-Homework submission for [Ritual Foundation](https://ritualfoundation.org) by [@Hasina128](https://github.com/Hasina128): a commit-reveal AI bounty judge that runs on any EVM chain and uses Ritual's LLM precompile (`0x0802`) for batch judging on Ritual testnet.
+ a commit-reveal AI bounty judge that runs on any EVM chain and uses Ritual's LLM precompile (`0x0802`) for batch judging on Ritual testnet.
 
 Forked from [cozfuttu/ritual-chain-workshop](https://github.com/cozfuttu/ritual-chain-workshop).
 
