@@ -83,7 +83,13 @@ async function main() {
   const bal = await pub.getBalance({ address: account.address });
   console.log("Balance:", formatEther(bal), "RITUAL");
 
-  const request = await wallet.prepareTransactionRequest({ to: contract, data, gas: 5_000_000n });
+  const request = await wallet.prepareTransactionRequest({
+    to: contract,
+    data,
+    gas: 5_000_000n,
+    maxPriorityFeePerGas: 2_000_000_000n,
+    maxFeePerGas: 50_000_000_000n,
+  });
   console.log("Prepared nonce:", request.nonce, "chainId:", request.chainId, "gas:", request.gas?.toString());
   const serialized = await wallet.signTransaction(request);
   const rpcRes = await fetch(chain.rpcUrls.default.http[0], {

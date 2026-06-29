@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import {
   createPublicClient,
   createWalletClient,
+  encodeFunctionData,
   encodePacked,
   http,
   keccak256,
@@ -276,14 +277,35 @@ async function runJudge(bountyId: bigint) {
   if (submissions.length === 0) throw new Error("No revealed submissions to judge");
 
   const llmInput = buildLlmInput(bounty[1], bounty[2], submissions);
-  const tx = await wallet.writeContract({
-    address: CONTRACT,
+  const data = encodeFunctionData({
     abi: aiJudgeAbi,
     functionName: "judgeAll",
     args: [bountyId, llmInput],
-    gas: JUDGE_ALL_GAS,
   });
+  // Ritual async LLM txs revert during eth_estimateGas — send raw tx with explicit gas.
+  const request = await wallet.prepareTransactionRequest({
+    to: CONTRACT,
+    data,
+    gas: 5_000_000n,
+    maxPriorityFeePerGas: 2_000_000_000n,
+    maxFeePerGas: 50_000_000_000n,
+  });
+  const serialized = await wallet.signTransaction(request);
+  const rpcRes = await fetch(RPC, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "eth_sendRawTransaction",
+      params: [serialized],
+    }),
+  });
+  const rpcJson = (await rpcRes.json()) as { result?: string; error?: { message: string } };
+  if (rpcJson.error) throw new Error(rpcJson.error.message);
+  const tx = rpcJson.result as Hex;
   console.log(`✓ judgeAll sent — tx ${tx}`);
+  console.log(`Explorer: https://explorer.ritualfoundation.org/tx/${tx}`);
   await publicClient.waitForTransactionReceipt({ hash: tx, timeout: 600_000 });
 }
 
