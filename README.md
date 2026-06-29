@@ -143,10 +143,11 @@ pnpm bounty:auto -- --bounty-id 1          # commit → reveal → judge → fin
 node --experimental-strip-types scripts/quick-judge.ts 1   # judge + finalize (if async LLM pending)
 ```
 
-## Submission checklist
+
+
 
 - [ ] Fork to `github.com/Hasina128/ritual-chain-workshop` and push this repo
 - [ ] Deploy contract on Ritual testnet (chain `1979`)
 - [ ] Fund owner RitualWallet for LLM fees
 - [ ] Run end-to-end demo (create → commit → reveal → judge → finalize)
-- [ ] Post proof on [Discord submission thread](https://discord.com/channels/1210468736205852672/1516880140867469481/1517222943229345814)
+
